@@ -147,6 +147,27 @@ def test_torch_export_container(name: str, factory: Callable[[], torch.nn.Module
     torch.testing.assert_close(out, eager, atol=1e-5, rtol=1e-5)
 
 
+@pytest.mark.skipif(not _HAS_TORCH_EXPORT_TRACKING, reason=_TORCH_EXPORT_TRACKING_REASON)
+@pytest.mark.skipif(not dynamo_is_available(), reason=DYNAMO_UNAVAILABLE_REASON)
+@pytest.mark.parametrize("resize_cls", [K.Resize, K.LongestMaxSize, K.SmallestMaxSize])
+@pytest.mark.parametrize("spatial_shape", [(9, 11), (11, 9)])
+@pytest.mark.parametrize("with_crop", [False, True])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.device_agnostic
+def test_torch_export_integer_resize_6024(resize_cls, spatial_shape, with_crop, dtype):
+    image = torch.linspace(0, 1, 2 * 3 * 9 * 11, dtype=dtype).reshape(2, 3, *spatial_shape)
+    operations = [resize_cls(6)]
+    if with_crop:
+        # The crop's geometry must use the resized canvas, rather than the original image shape.
+        operations.append(K.CenterCrop((3, 3), cropping_mode="resample"))
+    seq = K.AugmentationSequential(*operations)
+    expected = seq(image)
+    exported = torch.export.export(seq, (image,)).module()
+    actual = exported(image)
+    assert actual.shape == expected.shape
+    torch.testing.assert_close(actual, expected)
+
+
 def _mask_export_case(case: str) -> Tuple[torch.nn.Module, tuple, Callable[[object], torch.Tensor], torch.Tensor]:
     """Build a float64 image/mask pipeline for ``case``: the module, its arguments, a mask getter, the expected mask."""
     image = torch.zeros(1, 1, 1, 2, dtype=torch.float64)
