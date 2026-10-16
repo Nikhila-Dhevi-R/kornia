@@ -531,6 +531,8 @@ def _get_new_batch_shape(param: ParamItem, batch_shape: torch.Size, module: Opti
             size = getattr(module, "flags", {}).get("size") if module is not None else None
             if size is None:
                 return batch_shape
+            if isinstance(module, K.Resize) and isinstance(size, int):
+                size = _side_to_image_size(size, batch_shape[-1] / batch_shape[-2], module.flags["side"])
             new_batch_shape = list(batch_shape)
             new_batch_shape[-2:] = size
             return torch.Size(new_batch_shape)
